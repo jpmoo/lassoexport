@@ -23,19 +23,18 @@ interface APIResponse<T> {
 type Status =
   | { kind: 'working' }
   | { kind: 'done'; path: string }
-  | { kind: 'error'; message: string; details?: string };
+  | { kind: 'error'; message: string };
 
 function App(): React.JSX.Element {
   const [status, setStatus] = useState<Status>({ kind: 'working' });
 
   useEffect(() => {
     exportLasso().then(
-      ({ path, details }) => setStatus({ kind: 'done', path: `${path}\n\n${details}` }),
-      (err: ExportError) =>
+      (path) => setStatus({ kind: 'done', path }),
+      (err: unknown) =>
         setStatus({
           kind: 'error',
-          message: err.message,
-          details: err.details,
+          message: err instanceof Error ? err.message : String(err),
         }),
     );
   }, []);
@@ -66,9 +65,6 @@ function App(): React.JSX.Element {
         <>
           <Text style={styles.title}>Export failed</Text>
           <Text style={styles.path}>{status.message}</Text>
-          {status.details && (
-            <Text style={styles.path}>{status.details}</Text>
-          )}
         </>
       )}
     </View>
@@ -90,138 +86,45 @@ function deriveBaseName(notePath: string): string {
   return safe.length > 0 ? safe : 'note';
 }
 
-class ExportError extends Error {
-  details?: string;
-  constructor(message: string, details?: string) {
-    super(message);
-    this.details = details;
-  }
-}
+async function exportLasso(): Promise<string> {
+  const exportDir = await FileUtils.getExportPath();
+  if (!exportDir) throw new Error('cannot resolve EXPORT directory');
+  await FileUtils.makeDir(exportDir);
 
-async function exportLasso(): Promise<{ path: string; details: string }> {
-  const diagnostics: string[] = [];
-
-  let exportDir: string;
-  try {
-    exportDir = (await FileUtils.getExportPath()) ?? '';
-  } catch (e: unknown) {
-    throw new ExportError(
-      'getExportPath threw',
-      e instanceof Error ? e.message : String(e),
-    );
-  }
-  diagnostics.push(`exportDir: ${JSON.stringify(exportDir)}`);
-
-  if (!exportDir) {
-    throw new ExportError('exportDir empty', diagnostics.join('\n'));
-  }
-
-  let pluginDir: string | null | undefined;
-  try {
-    pluginDir = await PluginManager.getPluginDirPath();
-  } catch (e: unknown) {
-    pluginDir = `<threw: ${e instanceof Error ? e.message : String(e)}>`;
-  }
-  diagnostics.push(`pluginDir: ${JSON.stringify(pluginDir)}`);
-
-  try {
-    await FileUtils.makeDir(exportDir);
-  } catch (e: unknown) {
-    diagnostics.push(
-      `makeDir threw: ${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
+  const pluginDir = await PluginManager.getPluginDirPath();
+  if (!pluginDir) throw new Error('cannot resolve plugin directory');
 
   let baseName = 'note';
   try {
-    const raw = await PluginCommAPI.getCurrentFilePath();
-    diagnostics.push(`getCurrentFilePath raw: ${JSON.stringify(raw)}`);
-    const notePath = unwrap<string>(raw, 'getCurrentFilePath');
+    const notePath = unwrap<string>(
+      await PluginCommAPI.getCurrentFilePath(),
+      'getCurrentFilePath',
+    );
     baseName = deriveBaseName(notePath);
-  } catch (e: unknown) {
-    diagnostics.push(
-      `getCurrentFilePath err: ${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
-
-  try {
-    const rectRaw = await PluginCommAPI.getLassoRect();
-    diagnostics.push(`getLassoRect raw: ${JSON.stringify(rectRaw)}`);
-  } catch (e: unknown) {
-    diagnostics.push(
-      `getLassoRect err: ${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
-  try {
-    const countsRaw = await PluginCommAPI.getLassoElementTypeCounts();
-    diagnostics.push(`getLassoElementTypeCounts raw: ${JSON.stringify(countsRaw)}`);
-  } catch (e: unknown) {
-    diagnostics.push(
-      `getLassoElementTypeCounts err: ${e instanceof Error ? e.message : String(e)}`,
-    );
+  } catch {
+    // Filename is a nice-to-have; fall back to "note" if the SDK refuses.
   }
 
   const stamp = Date.now();
   const trimmedExport = exportDir.replace(/\/+$/, '');
-  const trimmedPlugin = (pluginDir ?? '').replace(/\/+$/, '');
+  const trimmedPlugin = pluginDir.replace(/\/+$/, '');
+  const stickerPath = `${trimmedPlugin}/sticker-${stamp}.sticker`;
   const outPath = `${trimmedExport}/lasso-${baseName}-${stamp}.png`;
-  diagnostics.push(`outPath: ${outPath}`);
 
-  const stickerCandidates = [
-    `${trimmedPlugin}/sticker-${stamp}.sticker`,
-    `/storage/emulated/0/Note/stickers/sticker-${stamp}.sticker`,
-    `${trimmedExport}/sticker-${stamp}.sticker`,
-  ];
+  unwrap<boolean>(
+    await PluginCommAPI.saveStickerByLasso(stickerPath),
+    'saveStickerByLasso',
+  );
 
-  let stickerPath: string | null = null;
-  for (const candidate of stickerCandidates) {
-    if (!candidate) continue;
-    const raw = (await PluginCommAPI.saveStickerByLasso(candidate)) as
-      | APIResponse<boolean>
-      | null
-      | undefined;
-    diagnostics.push(
-      `saveStickerByLasso(${candidate}) → ${JSON.stringify(raw)}`,
-    );
-    if (raw && raw.success) {
-      stickerPath = candidate;
-      break;
-    }
-  }
+  const size = unwrap<{ width: number; height: number }>(
+    await PluginCommAPI.getStickerSize(stickerPath),
+    'getStickerSize',
+  );
 
-  if (!stickerPath) {
-    throw new ExportError(
-      'saveStickerByLasso rejected every candidate path',
-      diagnostics.join('\n'),
-    );
-  }
-
-  let size: { width: number; height: number };
-  try {
-    const rawSize = await PluginCommAPI.getStickerSize(stickerPath);
-    diagnostics.push(`getStickerSize raw: ${JSON.stringify(rawSize)}`);
-    size = unwrap<{ width: number; height: number }>(rawSize, 'getStickerSize');
-  } catch (e: unknown) {
-    throw new ExportError(
-      e instanceof Error ? e.message : String(e),
-      diagnostics.join('\n'),
-    );
-  }
-
-  try {
-    const rawThumb = await PluginCommAPI.generateStickerThumbnail(
-      stickerPath,
-      outPath,
-      size,
-    );
-    diagnostics.push(`generateStickerThumbnail raw: ${JSON.stringify(rawThumb)}`);
-    unwrap<boolean>(rawThumb, 'generateStickerThumbnail');
-  } catch (e: unknown) {
-    throw new ExportError(
-      e instanceof Error ? e.message : String(e),
-      diagnostics.join('\n'),
-    );
-  }
+  unwrap<boolean>(
+    await PluginCommAPI.generateStickerThumbnail(stickerPath, outPath, size),
+    'generateStickerThumbnail',
+  );
 
   try {
     await FileUtils.deleteFile(stickerPath);
@@ -229,7 +132,7 @@ async function exportLasso(): Promise<{ path: string; details: string }> {
     // best-effort cleanup
   }
 
-  return { path: outPath, details: diagnostics.join('\n') };
+  return outPath;
 }
 
 const styles = StyleSheet.create({
