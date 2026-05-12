@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh repo *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.supernote.com)",
+      "Bash(npm --version)",
+      "Read(//private/tmp/**)",
+      "Bash(rm -rf lassoexport_scaffold)",
+      "Bash(npx --yes @react-native-community/cli@latest init lassoexport_scaffold --template @supernote-plugin/sn-plugin-template --version 0.79.2 --skip-install --skip-git-init)",
+      "Bash(npm install *)",
+      "Bash(npm view *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(npx react-native *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps=d.get\\('dependencies',{}\\); print\\('autolinked deps:'\\); [print\\(' -', k, '→', v.get\\('root','?'\\)\\) for k,v in deps.items\\(\\)]\")",
+      "Bash(brew --version)",
+      "Bash(brew list *)",
+      "Bash(brew install *)",
+      "Bash(export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home)",
+      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
+      "Bash(java -version)",
+      "Bash(export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools)",
+      "Bash(yes)",
+      "Bash(sdkmanager --licenses)",
+      "Bash(sdkmanager \"platforms;android-35\" \"build-tools;35.0.0\" \"platform-tools\" \"ndk;27.1.12297006\")",
+      "Bash(export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools && export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home && export PATH=\"$JAVA_HOME/bin:$PATH\" && ls $ANDROID_HOME/platforms/ $ANDROID_HOME/build-tools/ $ANDROID_HOME/ndk/ 2>&1)",
+      "Bash(./buildPlugin.sh)",
+      "Bash(chmod +x buildPlugin.sh)",
+      "Bash(echo \"tsc exit=$?\")",
+      "Bash(gh auth *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git -c user.email=jpmoo@users.noreply.github.com -c user.name=jpmoo commit -m ' *)",
+      "Bash(echo \"tsc=$?\")"
+    ]
+  }
+}

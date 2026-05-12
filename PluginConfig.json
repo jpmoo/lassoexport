@@ -1,5 +1,5 @@
 {
-  "name": "lassoexport",
+  "name": "Lasso Export",
   "desc": "Adds an Export PNG button to the lasso toolbar that saves the selected region as a PNG.",
   "iconPath": "./assets/icon.png",
   "versionName": "0.1.0",
