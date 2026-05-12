@@ -23,18 +23,19 @@ interface APIResponse<T> {
 type Status =
   | { kind: 'working' }
   | { kind: 'done'; path: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; details?: string };
 
 function App(): React.JSX.Element {
   const [status, setStatus] = useState<Status>({ kind: 'working' });
 
   useEffect(() => {
     exportLasso().then(
-      (path) => setStatus({ kind: 'done', path }),
-      (err: unknown) =>
+      ({ path, details }) => setStatus({ kind: 'done', path: `${path}\n\n${details}` }),
+      (err: ExportError) =>
         setStatus({
           kind: 'error',
-          message: err instanceof Error ? err.message : String(err),
+          message: err.message,
+          details: err.details,
         }),
     );
   }, []);
@@ -65,6 +66,9 @@ function App(): React.JSX.Element {
         <>
           <Text style={styles.title}>Export failed</Text>
           <Text style={styles.path}>{status.message}</Text>
+          {status.details && (
+            <Text style={styles.path}>{status.details}</Text>
+          )}
         </>
       )}
     </View>
@@ -86,31 +90,86 @@ function deriveBaseName(notePath: string): string {
   return safe.length > 0 ? safe : 'note';
 }
 
-async function exportLasso(): Promise<string> {
-  const exportDir = await FileUtils.getExportPath();
-  if (!exportDir) throw new Error('cannot resolve EXPORT directory');
-  await FileUtils.makeDir(exportDir);
+class ExportError extends Error {
+  details?: string;
+  constructor(message: string, details?: string) {
+    super(message);
+    this.details = details;
+  }
+}
+
+async function exportLasso(): Promise<{ path: string; details: string }> {
+  const diagnostics: string[] = [];
+
+  let exportDir: string;
+  try {
+    exportDir = (await FileUtils.getExportPath()) ?? '';
+  } catch (e: unknown) {
+    throw new ExportError(
+      'getExportPath threw',
+      e instanceof Error ? e.message : String(e),
+    );
+  }
+  diagnostics.push(`exportDir: ${JSON.stringify(exportDir)}`);
+
+  if (!exportDir) {
+    throw new ExportError('exportDir empty', diagnostics.join('\n'));
+  }
+
+  let pluginDir: string | null | undefined;
+  try {
+    pluginDir = await PluginManager.getPluginDirPath();
+  } catch (e: unknown) {
+    pluginDir = `<threw: ${e instanceof Error ? e.message : String(e)}>`;
+  }
+  diagnostics.push(`pluginDir: ${JSON.stringify(pluginDir)}`);
+
+  try {
+    await FileUtils.makeDir(exportDir);
+  } catch (e: unknown) {
+    diagnostics.push(
+      `makeDir threw: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 
   let baseName = 'note';
   try {
-    const notePath = unwrap<string>(
-      await PluginCommAPI.getCurrentFilePath(),
-      'getCurrentFilePath',
-    );
+    const raw = await PluginCommAPI.getCurrentFilePath();
+    diagnostics.push(`getCurrentFilePath raw: ${JSON.stringify(raw)}`);
+    const notePath = unwrap<string>(raw, 'getCurrentFilePath');
     baseName = deriveBaseName(notePath);
-  } catch {
-    // Filename is a nice-to-have; fall back to "note" if the SDK refuses.
+  } catch (e: unknown) {
+    diagnostics.push(
+      `getCurrentFilePath err: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 
   const stamp = Date.now();
-  const outPath = `${exportDir}/lasso-${baseName}-${stamp}.png`;
+  const trimmedDir = exportDir.replace(/\/+$/, '');
+  const outPath = `${trimmedDir}/lasso-${baseName}-${stamp}.png`;
+  diagnostics.push(`outPath: ${outPath}`);
 
-  unwrap<boolean>(
-    await PluginCommAPI.saveStickerByLasso(outPath),
-    'saveStickerByLasso',
-  );
+  let raw: unknown;
+  try {
+    raw = await PluginCommAPI.saveStickerByLasso(outPath);
+  } catch (e: unknown) {
+    throw new ExportError(
+      `saveStickerByLasso threw: ${e instanceof Error ? e.message : String(e)}`,
+      diagnostics.join('\n'),
+    );
+  }
+  diagnostics.push(`saveStickerByLasso raw: ${JSON.stringify(raw)}`);
 
-  return outPath;
+  try {
+    unwrap<boolean>(raw, 'saveStickerByLasso');
+  } catch (e: unknown) {
+    throw new ExportError(
+      e instanceof Error ? e.message : String(e),
+      diagnostics.join('\n'),
+    );
+  }
+
+  return { path: outPath, details: diagnostics.join('\n') };
 }
 
 const styles = StyleSheet.create({
