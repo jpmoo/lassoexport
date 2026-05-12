@@ -24,3 +24,7 @@ build/
 # Metro
 .metro-health-check*
 *.jsbundle
+
+# macOS iCloud Drive duplicate-collision artifacts
+* 2
+* 2.*
