@@ -144,6 +144,23 @@ async function exportLasso(): Promise<{ path: string; details: string }> {
     );
   }
 
+  try {
+    const rectRaw = await PluginCommAPI.getLassoRect();
+    diagnostics.push(`getLassoRect raw: ${JSON.stringify(rectRaw)}`);
+  } catch (e: unknown) {
+    diagnostics.push(
+      `getLassoRect err: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  try {
+    const countsRaw = await PluginCommAPI.getLassoElementTypeCounts();
+    diagnostics.push(`getLassoElementTypeCounts raw: ${JSON.stringify(countsRaw)}`);
+  } catch (e: unknown) {
+    diagnostics.push(
+      `getLassoElementTypeCounts err: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
   const stamp = Date.now();
   const trimmedExport = exportDir.replace(/\/+$/, '');
   const trimmedPlugin = (pluginDir ?? '').replace(/\/+$/, '');
