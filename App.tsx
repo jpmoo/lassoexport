@@ -168,10 +168,9 @@ async function exportLasso(): Promise<{ path: string; details: string }> {
   diagnostics.push(`outPath: ${outPath}`);
 
   const stickerCandidates = [
-    `${trimmedPlugin}/sticker-${stamp}.png`,
-    `${trimmedPlugin}/sticker-${stamp}`,
-    `sticker-${stamp}.png`,
-    `${trimmedExport}/sticker-${stamp}.png`,
+    `${trimmedPlugin}/sticker-${stamp}.sticker`,
+    `/storage/emulated/0/Note/stickers/sticker-${stamp}.sticker`,
+    `${trimmedExport}/sticker-${stamp}.sticker`,
   ];
 
   let stickerPath: string | null = null;
