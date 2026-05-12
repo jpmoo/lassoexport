@@ -11,20 +11,16 @@ selection lands in the device's **EXPORT** folder.
 
 1. The plugin registers a Type-2 (lasso toolbar) button via
    `PluginManager.registerButton`.
-2. When tapped, the plugin reads:
-   - the lasso rectangle (`PluginCommAPI.getLassoRect`)
-   - the current file path and page (`getCurrentFilePath`, `getCurrentPageNum`)
-3. It renders the full page to a temporary PNG at 2× via
-   `PluginFileAPI.generateNotePng`.
-4. A small in-tree native module (`LassoExportCropModule.kt`) crops the PNG
-   to the lasso rectangle using `Bitmap.createBitmap` and writes the result
-   to `<EXPORT>/lasso-<timestamp>.png`.
+2. When tapped, the plugin saves the lasso selection as a Supernote
+   sticker (`PluginCommAPI.saveStickerByLasso`) — stickers contain only
+   the selected ink, no template background.
+3. It reads the sticker's natural size (`getStickerSize`) and uses
+   `generateStickerThumbnail` at that size to re-encode it as a clean
+   PNG at `<EXPORT>/lasso-<note name>-<timestamp>.png`.
+4. The intermediate sticker file is deleted.
 
-The native crop module is necessary because the Supernote plugin SDK has no
-image-crop primitive and the official build script (`buildPlugin.sh`) does
-not ship third-party native modules from `node_modules`. Project-owned
-ReactPackages registered in `MainApplication.kt` are picked up and compiled
-into `app.npk`.
+Because everything is done through the official SDK, the plugin is pure
+JS — no native modules.
 
 ## Project layout
 
@@ -39,12 +35,7 @@ into `app.npk`.
 ├── buildPlugin.sh          # Supernote-supplied packager → .snplg
 ├── buildPlugin.ps1         # Windows variant
 ├── assets/icon.png         # plugin icon shown in the lasso toolbar
-└── android/                # standard RN Android project
-    └── app/src/main/java/com/lassoexport_scaffold/
-        ├── MainActivity.kt
-        ├── MainApplication.kt          # registers LassoExportCropPackage
-        ├── LassoExportCropModule.kt    # the PNG crop native module
-        └── LassoExportCropPackage.kt
+└── android/                # standard RN Android project (unmodified template)
 ```
 
 ## Build
@@ -89,10 +80,6 @@ Output: `build/outputs/lassoexport.snplg` (~6.7 MB).
 
 ## Configuration knobs
 
-- **Render scale.** `RENDER_SCALE` in `App.tsx` controls the resolution
-  of the intermediate full-page render (and therefore the cropped PNG).
-  Default is `2`. If the device returns lasso coordinates in
-  already-rendered pixels, set it to `1`.
 - **Apps.** `index.js` registers the button for `['NOTE']` only. Add
   `'DOC'` to also surface it during document text lassos.
 - **Editable element types.** `editDataTypes: [0, 1, 2, 3, 4, 5]` in

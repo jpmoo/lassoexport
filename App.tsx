@@ -7,7 +7,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  NativeModules,
   Pressable,
   StyleSheet,
   Text,
@@ -16,9 +15,7 @@ import {
 import {
   FileUtils,
   PluginCommAPI,
-  PluginFileAPI,
   PluginManager,
-  type Rect,
 } from 'sn-plugin-lib';
 
 interface APIResponse<T> {
@@ -27,25 +24,10 @@ interface APIResponse<T> {
   error?: { code: number; message: string };
 }
 
-interface LassoExportCropSpec {
-  crop(
-    srcPath: string,
-    dstPath: string,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): Promise<string>;
-}
-
-const LassoExportCrop = NativeModules.LassoExportCrop as LassoExportCropSpec;
-
 type Status =
   | { kind: 'working' }
   | { kind: 'done'; path: string }
   | { kind: 'error'; message: string };
-
-const RENDER_SCALE = 2;
 
 function App(): React.JSX.Element {
   const [status, setStatus] = useState<Status>({ kind: 'working' });
@@ -101,51 +83,52 @@ function unwrap<T>(value: unknown, what: string): T {
   return res.result;
 }
 
-async function exportLasso(): Promise<string> {
-  if (!LassoExportCrop) {
-    throw new Error('native crop module unavailable');
-  }
+function deriveBaseName(notePath: string): string {
+  const last = notePath.split('/').pop() ?? 'note';
+  const noExt = last.replace(/\.[^.]+$/, '');
+  const safe = noExt.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return safe.length > 0 ? safe : 'note';
+}
 
-  const rect = unwrap<Rect>(await PluginCommAPI.getLassoRect(), 'getLassoRect');
+async function exportLasso(): Promise<string> {
   const notePath = unwrap<string>(
     await PluginCommAPI.getCurrentFilePath(),
     'getCurrentFilePath',
   );
-  const page = unwrap<number>(
-    await PluginCommAPI.getCurrentPageNum(),
-    'getCurrentPageNum',
-  );
-
-  const pluginDir = await PluginManager.getPluginDirPath();
-  if (!pluginDir) throw new Error('cannot resolve plugin directory');
 
   const exportDir = await FileUtils.getExportPath();
   if (!exportDir) throw new Error('cannot resolve EXPORT directory');
   await FileUtils.makeDir(exportDir);
 
+  const pluginDir = await PluginManager.getPluginDirPath();
+  if (!pluginDir) throw new Error('cannot resolve plugin directory');
+
+  const baseName = deriveBaseName(notePath);
   const stamp = Date.now();
-  const fullPagePath = `${pluginDir}/page-${stamp}.png`;
-  const croppedPath = `${exportDir}/lasso-${stamp}.png`;
+  const stickerPath = `${pluginDir}/sticker-${stamp}.dat`;
+  const outPath = `${exportDir}/lasso-${baseName}-${stamp}.png`;
 
   unwrap<boolean>(
-    await PluginFileAPI.generateNotePng({
-      notePath,
-      page,
-      times: RENDER_SCALE,
-      pngPath: fullPagePath,
-      type: 1,
-    }),
-    'generateNotePng',
+    await PluginCommAPI.saveStickerByLasso(stickerPath),
+    'saveStickerByLasso',
   );
 
-  return LassoExportCrop.crop(
-    fullPagePath,
-    croppedPath,
-    rect.left * RENDER_SCALE,
-    rect.top * RENDER_SCALE,
-    (rect.right - rect.left) * RENDER_SCALE,
-    (rect.bottom - rect.top) * RENDER_SCALE,
+  const size = unwrap<{ width: number; height: number }>(
+    await PluginCommAPI.getStickerSize(stickerPath),
+    'getStickerSize',
   );
+
+  unwrap<boolean>(
+    await PluginCommAPI.generateStickerThumbnail(stickerPath, outPath, {
+      width: size.width,
+      height: size.height,
+    }),
+    'generateStickerThumbnail',
+  );
+
+  await FileUtils.deleteFile(stickerPath);
+
+  return outPath;
 }
 
 const styles = StyleSheet.create({
