@@ -12,11 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import {
-  FileUtils,
-  PluginCommAPI,
-  PluginManager,
-} from 'sn-plugin-lib';
+import { FileUtils, PluginCommAPI, PluginManager } from 'sn-plugin-lib';
 
 interface APIResponse<T> {
   success: boolean;
@@ -91,42 +87,28 @@ function deriveBaseName(notePath: string): string {
 }
 
 async function exportLasso(): Promise<string> {
-  const notePath = unwrap<string>(
-    await PluginCommAPI.getCurrentFilePath(),
-    'getCurrentFilePath',
-  );
-
   const exportDir = await FileUtils.getExportPath();
   if (!exportDir) throw new Error('cannot resolve EXPORT directory');
   await FileUtils.makeDir(exportDir);
 
-  const pluginDir = await PluginManager.getPluginDirPath();
-  if (!pluginDir) throw new Error('cannot resolve plugin directory');
+  let baseName = 'note';
+  try {
+    const notePath = unwrap<string>(
+      await PluginCommAPI.getCurrentFilePath(),
+      'getCurrentFilePath',
+    );
+    baseName = deriveBaseName(notePath);
+  } catch {
+    // Filename is a nice-to-have; fall back to "note" if the SDK refuses.
+  }
 
-  const baseName = deriveBaseName(notePath);
   const stamp = Date.now();
-  const stickerPath = `${pluginDir}/sticker-${stamp}.dat`;
   const outPath = `${exportDir}/lasso-${baseName}-${stamp}.png`;
 
   unwrap<boolean>(
-    await PluginCommAPI.saveStickerByLasso(stickerPath),
+    await PluginCommAPI.saveStickerByLasso(outPath),
     'saveStickerByLasso',
   );
-
-  const size = unwrap<{ width: number; height: number }>(
-    await PluginCommAPI.getStickerSize(stickerPath),
-    'getStickerSize',
-  );
-
-  unwrap<boolean>(
-    await PluginCommAPI.generateStickerThumbnail(stickerPath, outPath, {
-      width: size.width,
-      height: size.height,
-    }),
-    'generateStickerThumbnail',
-  );
-
-  await FileUtils.deleteFile(stickerPath);
 
   return outPath;
 }
