@@ -145,28 +145,72 @@ async function exportLasso(): Promise<{ path: string; details: string }> {
   }
 
   const stamp = Date.now();
-  const trimmedDir = exportDir.replace(/\/+$/, '');
-  const outPath = `${trimmedDir}/lasso-${baseName}-${stamp}.png`;
+  const trimmedExport = exportDir.replace(/\/+$/, '');
+  const trimmedPlugin = (pluginDir ?? '').replace(/\/+$/, '');
+  const outPath = `${trimmedExport}/lasso-${baseName}-${stamp}.png`;
   diagnostics.push(`outPath: ${outPath}`);
 
-  let raw: unknown;
-  try {
-    raw = await PluginCommAPI.saveStickerByLasso(outPath);
-  } catch (e: unknown) {
+  const stickerCandidates = [
+    `${trimmedPlugin}/sticker-${stamp}.png`,
+    `${trimmedPlugin}/sticker-${stamp}`,
+    `sticker-${stamp}.png`,
+    `${trimmedExport}/sticker-${stamp}.png`,
+  ];
+
+  let stickerPath: string | null = null;
+  for (const candidate of stickerCandidates) {
+    if (!candidate) continue;
+    const raw = (await PluginCommAPI.saveStickerByLasso(candidate)) as
+      | APIResponse<boolean>
+      | null
+      | undefined;
+    diagnostics.push(
+      `saveStickerByLasso(${candidate}) → ${JSON.stringify(raw)}`,
+    );
+    if (raw && raw.success) {
+      stickerPath = candidate;
+      break;
+    }
+  }
+
+  if (!stickerPath) {
     throw new ExportError(
-      `saveStickerByLasso threw: ${e instanceof Error ? e.message : String(e)}`,
+      'saveStickerByLasso rejected every candidate path',
       diagnostics.join('\n'),
     );
   }
-  diagnostics.push(`saveStickerByLasso raw: ${JSON.stringify(raw)}`);
 
+  let size: { width: number; height: number };
   try {
-    unwrap<boolean>(raw, 'saveStickerByLasso');
+    const rawSize = await PluginCommAPI.getStickerSize(stickerPath);
+    diagnostics.push(`getStickerSize raw: ${JSON.stringify(rawSize)}`);
+    size = unwrap<{ width: number; height: number }>(rawSize, 'getStickerSize');
   } catch (e: unknown) {
     throw new ExportError(
       e instanceof Error ? e.message : String(e),
       diagnostics.join('\n'),
     );
+  }
+
+  try {
+    const rawThumb = await PluginCommAPI.generateStickerThumbnail(
+      stickerPath,
+      outPath,
+      size,
+    );
+    diagnostics.push(`generateStickerThumbnail raw: ${JSON.stringify(rawThumb)}`);
+    unwrap<boolean>(rawThumb, 'generateStickerThumbnail');
+  } catch (e: unknown) {
+    throw new ExportError(
+      e instanceof Error ? e.message : String(e),
+      diagnostics.join('\n'),
+    );
+  }
+
+  try {
+    await FileUtils.deleteFile(stickerPath);
+  } catch {
+    // best-effort cleanup
   }
 
   return { path: outPath, details: diagnostics.join('\n') };
