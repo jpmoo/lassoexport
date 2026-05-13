@@ -2,7 +2,7 @@
  * @format
  */
 
-import { AppRegistry, Image } from 'react-native';
+import { AppRegistry, Image, ToastAndroid } from 'react-native';
 import App from './App';
 import { name as appName } from './app.json';
 import {
@@ -31,8 +31,9 @@ PluginManager.registerButtonListener({
     if (!event || event.id !== BUTTON_ID) return;
     exportLasso()
       .then((outPath) => {
+        const fileName = outPath.split('/').pop() || outPath;
         try {
-          NativeUIUtils.showRattaDialog(`Exported: ${outPath}`, '', 'OK', true);
+          ToastAndroid.show(`Exported ${fileName}`, ToastAndroid.LONG);
         } catch {
           // ignore — sticker was still written
         }
@@ -40,7 +41,12 @@ PluginManager.registerButtonListener({
       .catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         try {
-          NativeUIUtils.showRattaDialog(`Export failed: ${message}`, '', 'OK', false);
+          NativeUIUtils.showRattaDialog(
+            `Export failed: ${message}`,
+            '',
+            'OK',
+            false,
+          );
         } catch {
           // last-resort: nothing else we can do
         }
