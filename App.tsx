@@ -94,6 +94,27 @@ async function exportLasso(): Promise<string> {
   const pluginDir = await PluginManager.getPluginDirPath();
   if (!pluginDir) throw new Error('cannot resolve plugin directory');
 
+  // Defensive cleanup: an earlier invocation might have left stale sticker
+  // handles around. Drop the element cache, sweep any prior sticker files in
+  // our private dir, then proceed.
+  try {
+    PluginCommAPI.clearElementCache();
+  } catch {
+    // method may be missing in older SDKs
+  }
+  try {
+    const existing = await FileUtils.listFiles(pluginDir);
+    if (existing) {
+      for (const entry of existing) {
+        if (entry.endsWith('.sticker')) {
+          await FileUtils.deleteFile(`${pluginDir.replace(/\/+$/, '')}/${entry}`);
+        }
+      }
+    }
+  } catch {
+    // listFiles may surface odd paths; not worth failing the export over.
+  }
+
   let baseName = 'note';
   try {
     const notePath = unwrap<string>(
@@ -115,16 +136,29 @@ async function exportLasso(): Promise<string> {
     await PluginCommAPI.saveStickerByLasso(stickerPath),
     'saveStickerByLasso',
   );
+  if (!(await FileUtils.exists(stickerPath))) {
+    throw new Error(
+      'saveStickerByLasso reported success but the sticker file was not written',
+    );
+  }
 
   const size = unwrap<{ width: number; height: number }>(
     await PluginCommAPI.getStickerSize(stickerPath),
     'getStickerSize',
   );
+  if (!size || !size.width || !size.height) {
+    throw new Error(`getStickerSize returned ${JSON.stringify(size)}`);
+  }
 
   unwrap<boolean>(
     await PluginCommAPI.generateStickerThumbnail(stickerPath, outPath, size),
     'generateStickerThumbnail',
   );
+  if (!(await FileUtils.exists(outPath))) {
+    throw new Error(
+      'generateStickerThumbnail reported success but the PNG was not written',
+    );
+  }
 
   try {
     await FileUtils.deleteFile(stickerPath);
