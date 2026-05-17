@@ -1,6 +1,6 @@
 {
   "name": "lassoexport",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "build": "./buildPlugin.sh",
@@ -10,7 +10,7 @@
   "dependencies": {
     "react": "19.0.0",
     "react-native": "0.79.2",
-    "sn-plugin-lib": "^0.1.19"
+    "sn-plugin-lib": "^0.1.43"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
