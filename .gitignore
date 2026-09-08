@@ -28,3 +28,6 @@ build/
 # macOS iCloud Drive duplicate-collision artifacts
 * 2
 * 2.*
+
+# Agent settings; can hold access keys.
+.claude/

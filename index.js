@@ -11,6 +11,7 @@ import {
   PluginCommAPI,
   PluginManager,
 } from 'sn-plugin-lib';
+import { READ, WRITE, ensureAll } from './permissions';
 
 const BUTTON_ID = 1;
 
@@ -29,7 +30,14 @@ PluginManager.registerButton(2, ['NOTE'], {
 PluginManager.registerButtonListener({
   onButtonPress: (event) => {
     if (!event || event.id !== BUTTON_ID) return;
-    exportLasso()
+    // Reading the note and landing the result in EXPORT are both gated
+    // since sn-plugin-lib 0.1.65. Asked here, right after a deliberate
+    // tap, rather than at launch where a dialog arrives from nowhere.
+    ensureAll(READ, WRITE)
+      .then((trouble) => {
+        if (trouble) throw new Error(trouble);
+        return exportLasso();
+      })
       .then((outPath) => {
         const fileName = outPath.split('/').pop() || outPath;
         try {
